@@ -20,6 +20,12 @@ Parameters:
     Type: String
     Description: Zip file
 
+  FunctionName:
+    Type: String
+    Description: Name of the function
+    AllowedPattern: "^[0-9a-zA-Z]+([0-9a-zA-Z-]*[0-9a-zA-Z])*$"
+    ConstraintDescription: Required. Must not start or end with a hyphen
+
 Resources:
   ExecutionRole:
     Type: AWS::IAM::Role
@@ -66,20 +72,21 @@ Resources:
       Code:
         S3Bucket: !Ref CodeBucketName
         S3Key: !Ref ZipName
+      FunctionName: !Ref FunctionName
       Handler: lambda_function.lambda_handler
       Role: !GetAtt ExecutionRole.Arn
       Runtime: python2.7
       Timeout: 300
 
 Outputs:
-  PreprocessorFunction:
-    Description: Preprocessor Function
-    Value: !Ref Preprocessor
+  PreprocessorFunctionName:
+    Description: Preprocessor Function name
+    Value: !Ref FunctionName
     Export:
-      Name: !Sub "${AWS::StackName}:Preprocessor"
+      Name: !Sub "${AWS::StackName}:FunctionName"
 
   PreprocessorFunctionARN:
-    Description: "Preprocessor Function ARN"
+    Description: Preprocessor Function ARN
     Value: !GetAtt Preprocessor.Arn
     Export:
       Name: !Sub "${AWS::StackName}:PreprocessorARN"

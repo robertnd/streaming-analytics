@@ -16,7 +16,10 @@ Upload the Zip to S3:
 - Records are produced via KPL (Kinesis Producer Library)
 - Records are aggregated
 
+
 **`PreProcessor`**
+
+
 The preprocessor is a lambda function that de-aggregates KPL records. It is contained in the `ks-preprocessor` directory. The source code in this directory is provided by AWS and is only included here for purposes of Cloudformation automation.
 Please find the source here: https://github.com/amazon-archives/serverless-app-examples/tree/master/python/kinesis-analytics-process-kpl-record
 

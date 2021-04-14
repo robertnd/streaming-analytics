@@ -1,7 +1,7 @@
 target/
 scratchFiles/
 lambda/setup.cfg
-
+ks-preprocessor/*.zip
 .DS_Store
 
 ### STS ###
