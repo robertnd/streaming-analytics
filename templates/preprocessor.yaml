@@ -1,0 +1,91 @@
+AWSTemplateFormatVersion: "2010-09-09"
+Description: "Input stream lambda preprocessor"
+
+Parameters:
+  ProjectName:
+    Type: String
+    Description: Project Name
+    MinLength: 4
+    MaxLength: 20
+
+  RawInputStreamStackName:
+    Type: String
+    Description: Input stream stack name
+
+  CodeBucketName:
+    Type: String
+    Description: Code bucket name
+
+  ZipName:
+    Type: String
+    Description: Zip file
+
+Resources:
+  ExecutionRole:
+    Type: AWS::IAM::Role
+    Properties:
+      RoleName: !Sub "${AWS::StackName}-LambdaPreprocessorExecutionRole"
+      AssumeRolePolicyDocument:
+        Version: "2012-10-17"
+        Statement:
+          - Action:
+              - sts:AssumeRole
+            Effect: Allow
+            Principal:
+              Service:
+                - lambda.amazonaws.com
+      Path: "/"
+      Policies:
+        - PolicyName: !Sub ${AWS::StackName}-AccessKinesisRawInputStream
+          PolicyDocument:
+            Version: "2012-10-17"
+            Statement:
+              - Sid: LogsAccess
+                Effect: Allow
+                Action:
+                  - logs:CreateLogGroup
+                  - logs:CreateLogStream
+                  - logs:PutLogEvents
+                Resource: arn:aws:logs:*:*:*
+              - Sid: AccessRawInputStream
+                Effect: Allow
+                Action:
+                  - kinesis:GetRecords
+                  - kinesis:GetShardIterator
+                  - kinesis:DescribeStream
+                  - kinesis:DescribeStreamSummary
+                  - kinesis:ListStreams
+                  - kinesis:ListShards
+                Resource:
+                  - Fn::ImportValue: !Sub "${RawInputStreamStackName}:InputStreamARN"
+
+  Preprocessor:
+    Type: AWS::Lambda::Function
+    Properties:
+      Description: Kinesis Streams Preprocessor lambda package
+      Code:
+        S3Bucket: !Ref CodeBucketName
+        S3Key: !Ref ZipName
+      Handler: lambda_function.lambda_handler
+      Role: !GetAtt ExecutionRole.Arn
+      Runtime: python2.7
+      Timeout: 300
+
+Outputs:
+  PreprocessorFunction:
+    Description: Preprocessor Function
+    Value: !Ref Preprocessor
+    Export:
+      Name: !Sub "${AWS::StackName}:Preprocessor"
+
+  PreprocessorFunctionARN:
+    Description: "Preprocessor Function ARN"
+    Value: !GetAtt Preprocessor.Arn
+    Export:
+      Name: !Sub "${AWS::StackName}:PreprocessorARN"
+
+  FunctionExecutionRole:
+    Description: Preprocessor function execution role
+    Value: !GetAtt ExecutionRole.Arn
+    Export:
+      Name: !Sub "${AWS::StackName}:FunctionExecutionRole"

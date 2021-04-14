@@ -1,0 +1,86 @@
+AWSTemplateFormatVersion: "2010-09-09"
+Description: "Stack for creating input streams"
+
+Parameters:
+  ProjectName:
+    Type: String
+    Description: Project name
+    MinLength: 4
+    MaxLength: 20
+
+  DataStreamName:
+    Type: String
+    Description: Raw data stream name
+    AllowedPattern: "^[0-9a-zA-Z]+([0-9a-zA-Z-]*[0-9a-zA-Z])*$"
+    ConstraintDescription: " Required. Must not start or end with a hyphen"
+    MinLength: 4
+    MaxLength: 20
+
+  Shards:
+    Type: Number
+    Description: Open shards
+    Default: 1
+    MinValue: 1
+    MaxValue: 3
+
+  AverageRecordSize:
+    Type: Number
+    Description: Average record size in KiB
+    Default: 256
+    AllowedValues:
+      - 1
+      - 8
+      - 16
+      - 32
+      - 64
+      - 128
+      - 256
+      - 512
+      - 1024
+
+  MaxRecordsPerSecond:
+    Type: Number
+    Description: Maximum records written per second
+    Default: 1
+    MinValue: 1
+    MaxValue: 10
+
+  TotalConsumers:
+    Type: Number
+    Description: Consumers
+    Default: 1
+    MinValue: 1
+    MaxValue: 2
+
+  RetentionPeriodHours:
+    Type: Number
+    Description: Maximum records written per second
+    Default: 24
+    AllowedValues:
+      - 24
+      - 72
+      - 168
+
+Resources:
+  InputStream:
+    Type: AWS::Kinesis::Stream
+    Properties:
+      Name: !Ref DataStreamName
+      RetentionPeriodHours: !Ref RetentionPeriodHours
+      ShardCount: !Ref Shards
+      Tags:
+        - Key: Name
+          Value: !Ref ProjectName
+
+Outputs:
+  Stream:
+    Description: Input Stream
+    Value: !Ref InputStream
+    Export:
+      Name: !Sub "${AWS::StackName}:InputStream"
+
+  StreamARN:
+    Description: Input Stream ARN
+    Value: !GetAtt InputStream.Arn
+    Export:
+      Name: !Sub "${AWS::StackName}:InputStreamARN"

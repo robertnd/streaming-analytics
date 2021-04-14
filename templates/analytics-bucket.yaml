@@ -1,0 +1,44 @@
+AWSTemplateFormatVersion: "2010-09-09"
+Description: "Analytics bucket"
+
+Parameters:
+  ProjectName:
+    Type: String
+    Description: Project Name
+    MinLength: 4
+    MaxLength: 20
+
+  BucketName:
+    Type: String
+    Description: Bucket Name (Required. Must not contain upper case letters)
+    AllowedPattern: "^[0-9a-z]+([0-9a-z-]*[0-9a-z])*$"
+    ConstraintDescription: " Required. Must not contain upper case letters. Must not start or end with a hyphen"
+
+Resources:
+  LogsBucket:
+    DeletionPolicy: Retain
+    Type: AWS::S3::Bucket
+    Properties:
+      AccessControl: LogDeliveryWrite
+
+  Bucket:
+    Type: AWS::S3::Bucket
+    DeletionPolicy: Retain
+    Properties:
+      BucketName: !Ref BucketName
+      LoggingConfiguration:
+        DestinationBucketName: !Ref LogsBucket
+        LogFilePrefix: logs-access/
+
+Outputs:
+  Bucket:
+    Description: "Analytics Bucket name"
+    Value: !Ref Bucket
+    Export:
+      Name: !Sub "${AWS::StackName}:AnalyticsBucket"
+
+  BucketARN:
+    Description: "Analytics Bucket ARN"
+    Value: !GetAtt Bucket.Arn
+    Export:
+      Name: !Sub "${AWS::StackName}:AnalyticsBucketArn"

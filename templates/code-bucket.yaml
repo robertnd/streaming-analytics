@@ -1,0 +1,35 @@
+AWSTemplateFormatVersion: "2010-09-09"
+Description: "Code bucket for lambda preprocessor functions and dependencies"
+
+Parameters:
+  ProjectName:
+    Type: String
+    Description: Project Name
+    MinLength: 4
+    MaxLength: 20
+
+  BucketName:
+    Type: String
+    Description: Bucket Name (Required. Must not contain upper case letters)
+    AllowedPattern: "^[0-9a-z]+([0-9a-z-]*[0-9a-z])*$"
+    ConstraintDescription: " Required. Must not contain upper case letters. Must not start or end with a hyphen"
+
+Resources:
+  Bucket:
+    Type: AWS::S3::Bucket
+    DeletionPolicy: Retain
+    Properties:
+      BucketName: !Ref BucketName
+
+Outputs:
+  Bucket:
+    Description: "Code Bucket name"
+    Value: !Ref Bucket
+    Export:
+      Name: !Sub "${AWS::StackName}:CodeBucket"
+
+  BucketARN:
+    Description: "Code Bucket ARN"
+    Value: !GetAtt Bucket.Arn
+    Export:
+      Name: !Sub "${AWS::StackName}:CodeBucketArn"
