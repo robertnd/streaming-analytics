@@ -52,6 +52,24 @@ The templates are highly interdependent. Some stacks use the Outputs of existing
 
 ```
 
-Please use relevant and easy to remember values for the fields. These values are used to link stacks together via Output values 1. ProjectName - Use a common name so that it is easy to identify and related all resources created for a project / initiative. Add tags for easy management 2. StackName - Use a value that gives a general description of function of the stack. The stack name is used to prefix output values for the stack `{StackName}:InputStream`
+Please use relevant and easy to remember values for the fields. These values are used to link stacks together via Output values
+
+1. ProjectName - Use a common name so that it is easy to identify and related all resources created for a project / initiative. Add tags for easy management
+
+2. StackName - Use a value that gives a general description of function of the stack. The stack name is used to prefix output values for the stack `{StackName}:InputStream`
 
 Apply due diligence when populating the fields. Typos or non-existent resources will lead to failure during creation
+
+### Test the Lambda preprocessor
+
+Use the `testRecord.json` file to check that the preprocessor has been created correctly. Click `Test` on the Lambda Console to create a test and copy the contents of the file into the payload. If successful, the Execution tab should show two records processed successfully
+
+### Validate the application
+
+If successfully created, the Analytics Application will comprise these elements:
+
+1. Source - Streaming data source that reads data from a raw Kinesis data stream, an in-application stream and lambda preprocessor
+
+2. Real-time analytics - A Kinesis SQL application with destination stream(s) and pumps
+
+3. DEstination - A firehose delivery stream to S3
