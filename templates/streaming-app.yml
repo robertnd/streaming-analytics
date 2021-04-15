@@ -22,6 +22,14 @@ Parameters:
     MinLength: 4
     MaxLength: 20
 
+  SourceRecordsAggregation:
+    Type: String
+    Default: true
+    Description: Source records are aggregated
+    AllowedValues:
+      - true
+      - false
+
   PreprocessorStackName:
     Type: String
     Description: Preprocessor Stack Name
@@ -29,6 +37,9 @@ Parameters:
   AnalyticsBucketArn:
     Type: String
     Description: Analytics Bucket ARN
+
+Conditions:
+  AGGR: !Equals [!Ref SourceRecordsAggregation, true]
 
 Resources:
   DeliveryStreamRole:
@@ -328,10 +339,13 @@ Resources:
                 JSONMappingParameters:
                   RecordRowPath: $
           InputProcessingConfiguration:
-            InputLambdaProcessor:
-              ResourceARN:
-                Fn::ImportValue: !Sub "${PreprocessorStackName}:PreprocessorARN"
-              RoleARN: !GetAtt "KinesisAnalyticsRole.Arn"
+            Fn::If:
+              - AGGR
+              - InputLambdaProcessor:
+                  ResourceARN:
+                    Fn::ImportValue: !Sub "${PreprocessorStackName}:PreprocessorARN"
+                  RoleARN: !GetAtt "KinesisAnalyticsRole.Arn"
+              - Ref: AWS::NoValue
           KinesisStreamsInput:
             ResourceARN: !Sub "arn:aws:kinesis:${AWS::Region}:${AWS::AccountId}:stream/${DataStreamName}"
             RoleARN: !GetAtt "KinesisAnalyticsRole.Arn"

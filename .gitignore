@@ -1,4 +1,4 @@
-target/
+deprecated/
 scratchFiles/
 lambda/setup.cfg
 ks-preprocessor/*.zip

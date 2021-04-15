@@ -2,10 +2,12 @@
 
 This project sets up the starter AWS infrastructure for Kinesis streaming.
 
-## Assumptions
+## Record aggregation
 
-- Records are produced via KPL (Kinesis Producer Library)
-- Records are aggregated
+Records are produced via KPL (Kinesis Producer Library) will be aggregated if the `recordMaxBufferedTime` property is set. If this is the case, or if you know the records are aggregated, please complete the setup for the deaggregator processor. Details below
+
+If records are not aggregated, you can skip the preprocessor set up. When launching the Kinesis App stack template, set the `SourceRecordsAggregation` option to `false`
+
 
 **`PreProcessor`**
 
@@ -28,6 +30,8 @@ zip -r ks-preprocessor.zip .
 
 The lambda function can also be deployed manually via the Kinesis Application wizard (by selecting a Lambda temmplate)
 
+The preprocessor function needs to be set up only ONCE. The function can be reused with any other aggregated stream.
+
 **`AWS Cloudformation Templates`**
 
 1. `analytics_bucket.yaml` - Stack template that creates an S3 bucket which will be used to store the output of Kinesis Analytics processing
@@ -40,12 +44,30 @@ The lambda function can also be deployed manually via the Kinesis Application wi
 
 The templates are highly interdependent. Some stacks use the Outputs of existing stacks and hence those stacks must be run first. See below for dependence graph
 
+WITH RECORD AGGREGATION
+
 ```
 
     analytics_bucket.yaml --> code-bucket.yaml
                                               \
                                                \
                                                 input-stream.yaml --> preprocessor.yaml --> streaming-app.yaml
+                                               /
+                                              /
+    code-bucket.yaml --> analytics_bucket.yaml
+
+```
+
+NO RECORD AGGREGATION
+
+Note: Set the `SourceRecordsAggregation` option to `false` when executing the `streaming-app.yaml` template
+
+```
+
+    analytics_bucket.yaml --> code-bucket.yaml
+                                              \
+                                               \
+                                                input-stream.yaml --> streaming-app.yaml
                                                /
                                               /
     code-bucket.yaml --> analytics_bucket.yaml
@@ -72,4 +94,4 @@ If successfully created, the Analytics Application will comprise these elements:
 
 2. Real-time analytics - A Kinesis SQL application with destination stream(s) and pumps
 
-3. DEstination - A firehose delivery stream to S3
+3. Destination - A firehose delivery stream to S3
