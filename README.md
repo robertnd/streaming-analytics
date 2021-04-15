@@ -8,7 +8,6 @@ Records are produced via KPL (Kinesis Producer Library) will be aggregated if th
 
 If records are not aggregated, you can skip the preprocessor set up. When launching the Kinesis App stack template, set the `SourceRecordsAggregation` option to `false`
 
-
 **`PreProcessor`**
 
 The preprocessor is a lambda function that de-aggregates KPL records. It is contained in the `ks-preprocessor` directory. The source code in this directory is provided by AWS and is only included here for purposes of Cloudformation automation.
@@ -95,3 +94,7 @@ If successfully created, the Analytics Application will comprise these elements:
 2. Real-time analytics - A Kinesis SQL application with destination stream(s) and pumps
 
 3. Destination - A firehose delivery stream to S3
+
+### Running the application
+
+In the Kinesis Data Analytics applications console, select your application and click `Run`.
