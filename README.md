@@ -27,7 +27,7 @@ zip -r ks-preprocessor.zip .
 
 ```
 
-The lambda function can also be deployed manually via the Kinesis Application wizard (by selecting a Lambda temmplate)
+The lambda function can also be deployed manually via the Kinesis Application wizard (by selecting a Lambda template)
 
 The preprocessor function needs to be set up only ONCE. The function can be reused with any other aggregated stream.
 
@@ -35,9 +35,9 @@ The preprocessor function needs to be set up only ONCE. The function can be reus
 
 1. `analytics_bucket.yaml` - Stack template that creates an S3 bucket which will be used to store the output of Kinesis Analytics processing
 2. `code-bucket.yaml` - Stack template that creates an S3 bucket for holding the `preprocessor` archive (zip). The zip file is created by packing the contents of the `ks-preprocessor` directory and uploading it to S3 (see the preprocessor section above)
-3. `input-stream.yaml` - Stack template that creates a Kinesis Data Stream. Use this template to create data streams for raw KPL Records
+3. `input-stream.yaml` - Stack template that creates a Kinesis Data Stream. Use this template to create data streams for raw KPL Records. Careful sizing considerations need to be made before deploying this stack. Sizing affects throughput (if underprovisioned, throughput is throttled and extra messages will be rejected) and cost. Data streams CANNOT be resized after creation.
 4. `preprocessor.yaml` - Stack template that creates a lambda preprocessor function. The function is created from the Zip file contained in the S3 bucket from `code-bucket.yaml`.
-5. `streaming-app.yaml` - Stack template that creates a Kinesis Analytics application. This template contains basic aggregation for a single use case. Extend this template to create different applcations for different processing and output
+5. `streaming-app.yaml` - Stack template that creates a Kinesis Analytics application. This template contains basic aggregation (SQL application) for a single use case. It also creates a Kinesis Firehose stream for writing to S3. Extend this template to create different applcations for different processing and output
 
 ### Running the templates
 
@@ -73,13 +73,13 @@ Note: Set the `SourceRecordsAggregation` option to `false` when executing the `s
 
 ```
 
-Please use relevant and easy to remember values for the fields. These values are used to link stacks together via Output values
+Please use relevant and easy-to-remember values for the fields. These values are used to link stacks together via Output values
 
 1. ProjectName - Use a common name so that it is easy to identify and related all resources created for a project / initiative. Add tags for easy management
 
 2. StackName - Use a value that gives a general description of function of the stack. The stack name is used to prefix output values for the stack `{StackName}:InputStream`
 
-Apply due diligence when populating the fields. Typos or non-existent resources will lead to failure during creation
+Apply due diligence when populating the fields. Typos or non-existent resources will lead to failures during creation. Cloudformation is difficult to debug in the best of circumstances. Tagging and adopting a proper naming strategy with resources helps a lot with troubleshooting
 
 ### Test the Lambda preprocessor
 
@@ -89,11 +89,15 @@ Use the `testRecord.json` file to check that the preprocessor has been created c
 
 If successfully created, the Analytics Application will comprise these elements:
 
-1. Source - Streaming data source that reads data from a raw Kinesis data stream, an in-application stream and lambda preprocessor
+1. Source - Streaming data source that reads data from a raw Kinesis data stream, an in-application stream and lambda preprocessor if de-aggregation is enabled.
 
-2. Real-time analytics - A Kinesis SQL application with destination stream(s) and pumps
+2. Real-time analytics - A Kinesis SQL application with in-application streams, destination stream(s) and pumps
 
 3. Destination - A firehose delivery stream to S3
+
+### Data flow
+
+![Test Image](Dragster.jpg)
 
 ### Running the application
 
