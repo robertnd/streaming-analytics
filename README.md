@@ -97,7 +97,7 @@ If successfully created, the Analytics Application will comprise these elements:
 
 ### Data flow
 
-![Test Image](Dragster.jpg)
+![Test Image](./resources/ksflow.png)
 
 ### Running the application
 
