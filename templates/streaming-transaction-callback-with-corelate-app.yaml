@@ -1,0 +1,391 @@
+AWSTemplateFormatVersion: "2010-09-09"
+Description: "Stack for creating Kinesis Application"
+
+Parameters:
+  ProjectName:
+    Type: String
+    Description: Project Name
+    MinLength: 4
+    MaxLength: 20
+
+  ApplicationName:
+    Type: String
+    Description: Application Name
+    MinLength: 4
+    MaxLength: 20
+
+  DataStreamName:
+    Type: String
+    Description: Producer input stream name
+    AllowedPattern: "^[0-9a-zA-Z]+([0-9a-zA-Z-]*[0-9a-zA-Z])*$"
+    ConstraintDescription: " Required. Must not start or end with a hyphen"
+    MinLength: 4
+    MaxLength: 20
+
+  SourceRecordsAggregation:
+    Type: String
+    Default: true
+    Description: Source records are aggregated
+    AllowedValues:
+      - true
+      - false
+
+  PreprocessorStackName:
+    Type: String
+    Description: Preprocessor Stack Name
+
+  AnalyticsBucketArn:
+    Type: String
+    Description: Analytics Bucket ARN
+
+Conditions:
+  AGGR: !Equals [!Ref SourceRecordsAggregation, true]
+
+Resources:
+  DeliveryStreamRole:
+    Type: AWS::IAM::Role
+    Properties:
+      AssumeRolePolicyDocument:
+        Version: "2012-10-17"
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service:
+                - firehose.amazonaws.com
+            Action:
+              - sts:AssumeRole
+      Policies:
+        - PolicyName: s3Access
+          PolicyDocument:
+            Version: "2012-10-17"
+            Statement:
+              - Sid: ""
+                Effect: Allow
+                Action:
+                  - s3:AbortMultipartUpload
+                  - s3:GetBucketLocation
+                  - s3:GetObject
+                  - s3:ListBucket
+                  - s3:ListBucketMultipartUploads
+                  - s3:PutObject
+                Resource:
+                  - !Sub "${AnalyticsBucketArn}"
+                  - !Sub "${AnalyticsBucketArn}/*"
+              - Sid: ""
+                Effect: Allow
+                Action:
+                  - logs:PutLogEvents
+                Resource:
+                  - !Sub "arn:aws:logs:${AWS::Region}:${AWS::AccountId}:log-group:/aws/kinesisfirehose/*:log-stream:*"
+
+  DeliveryStream:
+    Type: AWS::KinesisFirehose::DeliveryStream
+    Properties:
+      DeliveryStreamType: DirectPut
+      S3DestinationConfiguration:
+        BucketARN: !Sub "${AnalyticsBucketArn}"
+        BufferingHints:
+          IntervalInSeconds: "60"
+          SizeInMBs: "1"
+        CompressionFormat: UNCOMPRESSED
+        RoleARN: !GetAtt "DeliveryStreamRole.Arn"
+
+  OutputStream:
+    Type: AWS::Kinesis::Stream
+    Properties:
+      Name: !Sub "${AWS::StackName}-OutputStream"
+      RetentionPeriodHours: 24
+      ShardCount: 1
+
+  KinesisAnalyticsRole:
+    Type: AWS::IAM::Role
+    Properties:
+      AssumeRolePolicyDocument:
+        Version: "2012-10-17"
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service:
+                - kinesisanalytics.amazonaws.com
+            Action:
+              - sts:AssumeRole
+      Policies:
+        - PolicyName: kinesisaccess
+          PolicyDocument:
+            Version: "2012-10-17"
+            Statement:
+              - Sid: ReadInputStream
+                Effect: Allow
+                Action:
+                  - kinesis:DescribeStream
+                  - kinesis:GetShardIterator
+                  - kinesis:GetRecords
+                Resource:
+                  - !Sub "arn:aws:kinesis:${AWS::Region}:${AWS::AccountId}:stream/${DataStreamName}"
+              - Sid: ListStreams
+                Effect: Allow
+                Action:
+                  - firehose:ListDeliveryStreams
+                Resource: "*"
+              - Sid: RunPreprocessor
+                Effect: Allow
+                Action:
+                  - lambda:InvokeFunction
+                  - lambda:GetFunctionConfiguration
+                Resource:
+                  - Fn::ImportValue: !Sub "${PreprocessorStackName}:PreprocessorARN"
+              - Sid: WriteOutputFirehose
+                Effect: Allow
+                Action:
+                  - firehose:DescribeDeliveryStream
+                  - firehose:PutRecord
+                  - firehose:PutRecordBatch
+                Resource:
+                  - !GetAtt "DeliveryStream.Arn"
+
+  KinesisApplication:
+    Type: AWS::KinesisAnalytics::Application
+    Properties:
+      ApplicationName: !Ref ApplicationName
+      ApplicationDescription: !Sub "Kinesis Analytics for ${ProjectName}-${ApplicationName}"
+      ApplicationCode: !Sub |
+        CREATE STREAM "DESTINATION_SQL_STREAM"(
+            TransactionType VARCHAR(25), SourceSystem VARCHAR(25), ServiceName VARCHAR(25), ProductId VARCHAR(25), Channel VARCHAR(25),
+            EventTimestamp BIGINT, EATTimestamp TIMESTAMP,
+            EventHour INTEGER, EventDay INTEGER, EventMonth INTEGER, EventYear INTEGER,
+            WeekInMonth INTEGER, WeekInYear INTEGER,
+            DayInWeek INTEGER, DayInMonth INTEGER, DayInYear INTEGER,
+            IsWeekDay BOOLEAN, DayName VARCHAR(3), MonthName VARCHAR(3),
+            WindowAggregate BOOLEAN,
+            WindowSize INTEGER, ItemCount BIGINT, Amount DOUBLE
+            );
+
+        -- One-Minute Interval Summary By Dimensions
+        CREATE OR REPLACE PUMP "Dimension_PUMP_60" AS 
+        INSERT INTO "DESTINATION_SQL_STREAM" (
+            TransactionType, SourceSystem, ServiceName, ProductId, Channel,
+            EventTimestamp, EATTimestamp,
+            EventHour, EventDay, EventMonth, EventYear,
+            WeekInMonth, WeekInYear,
+            DayInWeek, DayInMonth, DayInYear,
+            IsWeekDay, DayName, MonthName,
+            WindowAggregate,
+            WindowSize, ItemCount, Amount
+            )
+        SELECT 
+            transactionType, sourceSystem, serviceName, productId, channel,
+            UNIX_TIMESTAMP(eventTimestamp), EATTimestamp, 
+            EXTRACT(HOUR FROM EATTimestamp), EXTRACT(DAY FROM EATTimestamp), EXTRACT(MONTH FROM EATTimestamp), EXTRACT(YEAR FROM EATTimestamp), 
+            CAST(TIMESTAMP_TO_CHAR('W',EATTimestamp) as INTEGER), CAST(TIMESTAMP_TO_CHAR('w',EATTimestamp) as INTEGER),
+            CAST(TIMESTAMP_TO_CHAR('u',EATTimestamp) as INTEGER), CAST(TIMESTAMP_TO_CHAR('D',EATTimestamp) as INTEGER), CAST(TIMESTAMP_TO_CHAR('d',EATTimestamp) as INTEGER),  
+            CASE 
+                WHEN CAST(TIMESTAMP_TO_CHAR('u',EATTimestamp) as INTEGER) > 5 THEN FALSE
+                ELSE TRUE
+            END, TIMESTAMP_TO_CHAR('EEE',EATTimestamp), TIMESTAMP_TO_CHAR('MMM',EATTimestamp),
+            false,
+            WindowSize, ItemCount, Amount
+        FROM 
+        (
+            SELECT stream
+                saf_datastream."transactionType" as transactionType, saf_datastream."sourceSystem" as sourceSystem, saf_datastream."serviceName" as serviceName, saf_datastream."productId" as productId, saf_datastream."channel" as channel,
+                STEP (saf_datastream.ROWTIME BY INTERVAL '60' SECOND) as eventTimestamp, TO_TIMESTAMP(UNIX_TIMESTAMP(CURRENT_ROW_TIMESTAMP) + 10800000) as EATTimestamp,
+                60 as WindowSize, count(*) as ItemCount, sum(saf_datastream."amount") as Amount
+                FROM "DATA_001" as saf_datastream
+                GROUP BY 
+                saf_datastream."transactionType", saf_datastream."sourceSystem", saf_datastream."serviceName", saf_datastream."productId", saf_datastream."channel",
+                STEP (saf_datastream.ROWTIME BY INTERVAL '60' SECOND)
+        );
+
+        -- One-Minute Interval Summary
+        CREATE OR REPLACE PUMP "Summary_PUMP_60" AS 
+        INSERT INTO "DESTINATION_SQL_STREAM" (
+            EventTimestamp, EATTimestamp,
+            EventHour, EventDay, EventMonth, EventYear,
+            WeekInMonth, WeekInYear,
+            DayInWeek, DayInMonth, DayInYear,
+            IsWeekDay, DayName, MonthName,
+            WindowAggregate,
+            WindowSize, ItemCount, Amount
+            )
+        SELECT 
+            UNIX_TIMESTAMP(eventTimestamp), EATTimestamp, 
+            EXTRACT(HOUR FROM EATTimestamp), EXTRACT(DAY FROM EATTimestamp), EXTRACT(MONTH FROM EATTimestamp), EXTRACT(YEAR FROM EATTimestamp), 
+            CAST(TIMESTAMP_TO_CHAR('W',EATTimestamp) as INTEGER), CAST(TIMESTAMP_TO_CHAR('w',EATTimestamp) as INTEGER),
+            CAST(TIMESTAMP_TO_CHAR('u',EATTimestamp) as INTEGER), CAST(TIMESTAMP_TO_CHAR('D',EATTimestamp) as INTEGER), CAST(TIMESTAMP_TO_CHAR('d',EATTimestamp) as INTEGER),  
+            CASE 
+                WHEN CAST(TIMESTAMP_TO_CHAR('u',EATTimestamp) as INTEGER) > 5 THEN FALSE
+                ELSE TRUE
+            END, TIMESTAMP_TO_CHAR('EEE',EATTimestamp), TIMESTAMP_TO_CHAR('MMM',EATTimestamp),
+            true,
+            WindowSize, ItemCount, Amount
+        FROM 
+        (
+            SELECT stream
+                STEP (saf_datastream.ROWTIME BY INTERVAL '60' SECOND) as eventTimestamp, TO_TIMESTAMP(UNIX_TIMESTAMP(CURRENT_ROW_TIMESTAMP) + 10800000) as EATTimestamp,
+                60 as WindowSize, count(*) as ItemCount, sum(saf_datastream."amount") as Amount
+                FROM "DATA_001" as saf_datastream
+                GROUP BY 
+                STEP (saf_datastream.ROWTIME BY INTERVAL '60' SECOND)
+        );
+
+        -- Five-Minute Interval Summary By Dimensions
+        CREATE OR REPLACE PUMP "Dimension_PUMP_300" AS 
+        INSERT INTO "DESTINATION_SQL_STREAM" (
+            TransactionType, SourceSystem, ServiceName, ProductId, Channel,
+            EventTimestamp, EATTimestamp,
+            EventHour, EventDay, EventMonth, EventYear,
+            WeekInMonth, WeekInYear,
+            DayInWeek, DayInMonth, DayInYear,
+            IsWeekDay, DayName, MonthName,
+            WindowAggregate,
+            WindowSize, ItemCount, Amount
+            )
+        SELECT 
+            transactionType, sourceSystem, serviceName, productId, channel,
+            UNIX_TIMESTAMP(eventTimestamp), EATTimestamp, 
+            EXTRACT(HOUR FROM EATTimestamp), EXTRACT(DAY FROM EATTimestamp), EXTRACT(MONTH FROM EATTimestamp), EXTRACT(YEAR FROM EATTimestamp), 
+            CAST(TIMESTAMP_TO_CHAR('W',EATTimestamp) as INTEGER), CAST(TIMESTAMP_TO_CHAR('w',EATTimestamp) as INTEGER),
+            CAST(TIMESTAMP_TO_CHAR('u',EATTimestamp) as INTEGER), CAST(TIMESTAMP_TO_CHAR('D',EATTimestamp) as INTEGER), CAST(TIMESTAMP_TO_CHAR('d',EATTimestamp) as INTEGER),  
+            CASE 
+                WHEN CAST(TIMESTAMP_TO_CHAR('u',EATTimestamp) as INTEGER) > 5 THEN FALSE
+                ELSE TRUE
+            END, TIMESTAMP_TO_CHAR('EEE',EATTimestamp), TIMESTAMP_TO_CHAR('MMM',EATTimestamp),
+            false,
+            WindowSize, ItemCount, Amount
+        FROM 
+        (
+            SELECT stream
+                saf_datastream."transactionType" as transactionType, saf_datastream."sourceSystem" as sourceSystem, saf_datastream."serviceName" as serviceName, saf_datastream."productId" as productId, saf_datastream."channel" as channel,
+                STEP (saf_datastream.ROWTIME BY INTERVAL '5' MINUTE) as eventTimestamp, TO_TIMESTAMP(UNIX_TIMESTAMP(CURRENT_ROW_TIMESTAMP) + 10800000) as EATTimestamp,
+                300 as WindowSize, count(*) as ItemCount, sum(saf_datastream."amount") as Amount
+                FROM "DATA_001" as saf_datastream
+                GROUP BY 
+                saf_datastream."transactionType", saf_datastream."sourceSystem", saf_datastream."serviceName", saf_datastream."productId", saf_datastream."channel",
+                STEP (saf_datastream.ROWTIME BY INTERVAL '5' MINUTE)
+        );
+
+        -- Five-Minute Interval Summary
+        CREATE OR REPLACE PUMP "Summary_PUMP_300" AS 
+        INSERT INTO "DESTINATION_SQL_STREAM" (
+            EventTimestamp, EATTimestamp,
+            EventHour, EventDay, EventMonth, EventYear,
+            WeekInMonth, WeekInYear,
+            DayInWeek, DayInMonth, DayInYear,
+            IsWeekDay, DayName, MonthName,
+            WindowAggregate,
+            WindowSize, ItemCount, Amount
+            )
+        SELECT 
+            UNIX_TIMESTAMP(eventTimestamp), EATTimestamp, 
+            EXTRACT(HOUR FROM EATTimestamp), EXTRACT(DAY FROM EATTimestamp), EXTRACT(MONTH FROM EATTimestamp), EXTRACT(YEAR FROM EATTimestamp), 
+            CAST(TIMESTAMP_TO_CHAR('W',EATTimestamp) as INTEGER), CAST(TIMESTAMP_TO_CHAR('w',EATTimestamp) as INTEGER),
+            CAST(TIMESTAMP_TO_CHAR('u',EATTimestamp) as INTEGER), CAST(TIMESTAMP_TO_CHAR('D',EATTimestamp) as INTEGER), CAST(TIMESTAMP_TO_CHAR('d',EATTimestamp) as INTEGER),  
+            CASE 
+                WHEN CAST(TIMESTAMP_TO_CHAR('u',EATTimestamp) as INTEGER) > 5 THEN FALSE
+                ELSE TRUE
+            END, TIMESTAMP_TO_CHAR('EEE',EATTimestamp), TIMESTAMP_TO_CHAR('MMM',EATTimestamp),
+            true,
+            WindowSize, ItemCount, Amount
+        FROM 
+        (
+            SELECT stream
+                STEP (saf_datastream.ROWTIME BY INTERVAL '5' MINUTE) as eventTimestamp, TO_TIMESTAMP(UNIX_TIMESTAMP(CURRENT_ROW_TIMESTAMP) + 10800000) as EATTimestamp,
+                300 as WindowSize, count(*) as ItemCount, sum(saf_datastream."amount") as Amount
+                FROM "DATA_001" as saf_datastream
+                GROUP BY 
+                STEP (saf_datastream.ROWTIME BY INTERVAL '5' MINUTE)
+        );
+
+      Inputs:
+        - NamePrefix: DATA
+          InputSchema:
+            RecordColumns:
+              - Name: transactionId
+                SqlType: VARCHAR(20)
+                Mapping: $.transactionId
+              - Name: checkoutRequestID
+                SqlType: VARCHAR(50)
+                Mapping: $.checkoutRequestID
+              - Name: merchantRequestID
+                SqlType: VARCHAR(50)
+                Mapping: $.merchantRequestID
+
+              - Name: requestDetailsMsisdn
+                SqlType: VARCHAR(30)
+                Mapping: $.requestDetails[0].value
+
+              - Name: serviceName
+                SqlType: VARCHAR(30)
+                Mapping: $.serviceName
+              
+              - Name: sourceSystem
+                SqlType: VARCHAR(30)
+                Mapping: $.sourceSystem
+              
+              - Name: msisdn
+                SqlType: BIGINT
+                Mapping: $.msisdn
+              
+              - Name: callback
+                SqlType: BOOLEAN
+                Mapping: $.callback
+              - Name: transactionType
+                SqlType: VARCHAR(20)
+                Mapping: $.transactionType
+              - Name: productId
+                SqlType: VARCHAR(20)
+                Mapping: $.productId
+              - Name: amount
+                SqlType: DOUBLE
+                Mapping: $.amount
+              - Name: channel
+                SqlType: VARCHAR(15)
+                Mapping: $.channel
+              
+            RecordFormat:
+              RecordFormatType: JSON
+              MappingParameters:
+                JSONMappingParameters:
+                  RecordRowPath: $
+          InputProcessingConfiguration:
+            Fn::If:
+              - AGGR
+              - InputLambdaProcessor:
+                  ResourceARN:
+                    Fn::ImportValue: !Sub "${PreprocessorStackName}:PreprocessorARN"
+                  RoleARN: !GetAtt "KinesisAnalyticsRole.Arn"
+              - Ref: AWS::NoValue
+          KinesisStreamsInput:
+            ResourceARN: !Sub "arn:aws:kinesis:${AWS::Region}:${AWS::AccountId}:stream/${DataStreamName}"
+            RoleARN: !GetAtt "KinesisAnalyticsRole.Arn"
+
+  KinesisAnalyticsAppOutput:
+    Type: AWS::KinesisAnalytics::ApplicationOutput
+    Properties:
+      ApplicationName: !Ref KinesisApplication
+      Output:
+        DestinationSchema:
+          RecordFormatType: JSON
+        KinesisFirehoseOutput:
+          ResourceARN: !GetAtt DeliveryStream.Arn
+          RoleARN: !GetAtt KinesisAnalyticsRole.Arn
+        Name: DESTINATION_SQL_STREAM
+
+Outputs:
+  KinesisAppName:
+    Description: Kinesis Application name
+    Value: !Ref KinesisApplication
+    Export:
+      Name: !Sub "${AWS::StackName}:KinesisAppName"
+
+  DeliveryStreamName:
+    Description: Delivery stream name
+    Value: !Ref DeliveryStream
+    Export:
+      Name: !Sub "${AWS::StackName}:DeliveryStreamName"
+
+  DeliveryStreamARN:
+    Description: Delivery stream ARN
+    Value: !GetAtt DeliveryStream.Arn
+    Export:
+      Name: !Sub "${AWS::StackName}:DeliveryStreamARN"

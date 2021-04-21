@@ -73,7 +73,7 @@ Resources:
         S3Bucket: !Ref CodeBucketName
         S3Key: !Ref ZipName
       FunctionName: !Ref FunctionName
-      Handler: lambda_function.lambda_handler
+      Handler: transaction-callback-preprocessor.lambda_handler
       Role: !GetAtt ExecutionRole.Arn
       Runtime: python2.7
       Timeout: 300
