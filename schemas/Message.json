@@ -1,0 +1,13 @@
+{
+  "transactionId": "324234240",
+  "serviceName": "MPESA",
+  "msisdn": 724912873,
+  "sourceSystem": "MPESA",
+  "callback": "false",
+  "transactionType": "MPESA",
+  "productId": "242342424",
+  "amount": 125.15,
+  "channel": "MPESA",
+  "checkoutRequestID": "7d603700-a11f-4cf0-a59d-a25f834b8b90",
+  "merchantRequestID": "83fcb7e7-846f-4317-9759-1a17b300357c"
+}

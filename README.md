@@ -15,7 +15,7 @@ NOTE: The de-aggregation operation returns a no-op if records are not aggregated
 A preprocessor is a lambda function that de-aggregates KPL records. There are 2 of them in this repository and can be found at the root of the `ks-preprocessor` directory
 
 1. `standard-preprocessor.py` - This function is provided by AWS and has been copied as-is from here: https://github.com/amazon-archives/serverless-app-examples/tree/master/python/kinesis-analytics-process-kpl-record
-2. `transaction-callback-preprocessor.py` - This is a modification of the standard processor. It flattens Json key-value lists in the TransactionLog and Callback messages into objects. Kinesis cannot process deeply nested structures. This preparation is important because it surfaces data so that it can be easily correlated and merged
+2. `transaction-callback-preprocessor.py` - This is a modification of the standard processor. It flattens Json key-value lists in the Transaction [`schemas/Transaction.json` ] and Callback [] `schemas/Callback.json` ] messages into objects. Kinesis cannot process deeply nested structures. This preparation is important because it surfaces data so that it can be easily correlated and merged
 
 Dependencies were added manually by navigating into `/<..>/ks-preprocessor` and running this command from inside the directory:
 
@@ -45,7 +45,7 @@ For instance: `Handler: transaction-callback-preprocessor.lambda_handler`
 3. `input-stream.yaml` - Stack template that creates a Kinesis Data Stream. Use this template to create data streams for raw KPL Records. Careful sizing considerations need to be made before deploying this stack. Sizing affects throughput (if underprovisioned, throughput is throttled and extra messages will be rejected) and cost. Data streams CANNOT be resized after creation.
 4. `preprocessor.yaml` - Stack template that creates a lambda preprocessor function. The function is created from the Zip file contained in the S3 bucket from `code-bucket.yaml`.
 5. `streaming-transaction-callback-with-corelate-app.yaml` - Stack template that creates a Kinesis Analytics application. This template corelates Transaction and Callback records written to the data stream and writes the joined stream to S3 via Kinesis Firehose. Extend this template to create different applcations for different processing and output.
-6. `streaming-app.yaml` - Stack template that creates a Kinesis Analytics application. This template reads a `Message` data stream (which is a general record) and creates streams using various windows (1 minute, 5 minute). These streams aggregate the record `count`s and `amount`s over the windows at that instance. This is application can be customized to generate different kinds of time-series data. All streams are combined into a destination stream and written to S3 via Kinesis Firehose.
+6. `streaming-app.yaml` - Stack template that creates a Kinesis Analytics application. This template reads a Message [ `schemas/Message.json` ] data stream (which is a general record) and creates streams using various windows (1 minute, 5 minute). These streams aggregate the record `count`s and `amount`s over the windows at that instance. This is application can be customized to generate different kinds of time-series data. All streams are combined into a destination stream and written to S3 via Kinesis Firehose.
 
 ### Running the templates
 

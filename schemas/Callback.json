@@ -1,0 +1,23 @@
+{
+  "transactionId": 324234240,
+  "checkoutRequestID": "7d603700-a11f-4cf0-a59d-a25f834b8b90",
+  "merchantRequestID": "83fcb7e7-846f-4317-9759-1a17b300357c",
+  "requestDetails": [{ "key": "msisdn", "value": 724912873 }],
+  "timestamp": 1619171171473,
+  "sourceSystem": "MPESA",
+  "serviceName": "MPESA",
+  "msisdn": 724912873,
+  "transactionTime": 1619171171473,
+  "responseCode": "Failed",
+  "responseStatus": "Failed",
+  "transactionType": "paybill",
+  "revenue": [
+    { "key": "productId", "value": "1000288343" },
+    { "key": "sendTo", "value": 724912873 },
+    { "key": "paybill", "value": "343242" },
+    { "key": "accountNumber", "value": 724912873 },
+    { "key": "tillNumber", "value": "343242" },
+    { "key": "amount", "value": "125.10" },
+    { "key": "channel", "value": "MPESA" }
+  ]
+}

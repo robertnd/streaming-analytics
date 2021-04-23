@@ -1,0 +1,21 @@
+{
+  "requestDetails": [{ "key": "msisdn", "value": 724912871 }],
+  "timestamp": 1619171171074,
+  "sourceSystem": "MPESA",
+  "serviceName": "MPESA",
+  "msisdn": 724912871,
+  "transactionTime": 1619171171074,
+  "transactionId": 324234247,
+  "responseCode": null,
+  "responseStatus": null,
+  "transactionType": "paybill",
+  "revenue": [
+    { "key": "productId", "value": "1000288343" },
+    { "key": "sendTo", "value": 724912871 },
+    { "key": "paybill", "value": "343242" },
+    { "key": "accountNumber", "value": 724912871 },
+    { "key": "tillNumber", "value": "343242" },
+    { "key": "amount", "value": "125.10" },
+    { "key": "channel", "value": "MPESA" }
+  ]
+}
