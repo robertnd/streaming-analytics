@@ -6,13 +6,13 @@ Parameters:
     Type: String
     Description: Project Name
     MinLength: 4
-    MaxLength: 20
+    MaxLength: 40
 
   ApplicationName:
     Type: String
     Description: Application Name
     MinLength: 4
-    MaxLength: 20
+    MaxLength: 40
 
   DataStreamName:
     Type: String
@@ -20,7 +20,7 @@ Parameters:
     AllowedPattern: "^[0-9a-zA-Z]+([0-9a-zA-Z-]*[0-9a-zA-Z])*$"
     ConstraintDescription: " Required. Must not start or end with a hyphen"
     MinLength: 4
-    MaxLength: 20
+    MaxLength: 40
 
   SourceRecordsAggregation:
     Type: String
@@ -149,152 +149,73 @@ Resources:
       ApplicationName: !Ref ApplicationName
       ApplicationDescription: !Sub "Kinesis Analytics for ${ProjectName}-${ApplicationName}"
       ApplicationCode: !Sub |
-        CREATE STREAM "DESTINATION_SQL_STREAM"(
-            TransactionType VARCHAR(25), SourceSystem VARCHAR(25), ServiceName VARCHAR(25), ProductId VARCHAR(25), Channel VARCHAR(25),
-            EventTimestamp BIGINT, EATTimestamp TIMESTAMP,
-            EventHour INTEGER, EventDay INTEGER, EventMonth INTEGER, EventYear INTEGER,
-            WeekInMonth INTEGER, WeekInYear INTEGER,
-            DayInWeek INTEGER, DayInMonth INTEGER, DayInYear INTEGER,
-            IsWeekDay BOOLEAN, DayName VARCHAR(3), MonthName VARCHAR(3),
-            WindowAggregate BOOLEAN,
-            WindowSize INTEGER, ItemCount BIGINT, Amount DOUBLE
+        -- transaction
+        CREATE OR REPLACE STREAM "TRANSACTION_STREAM"(
+            transactionId VARCHAR(20), requestMsisdn INTEGER,
+            serviceName VARCHAR(20), sourceSystem VARCHAR(20), msisdn INTEGER, transactionTime TIMESTAMP, responseCode VARCHAR(20), responseStatus VARCHAR(20),
+            transactionType VARCHAR(20), productId VARCHAR(20), sendTo VARCHAR(20), paybill VARCHAR(10), accountNumber VARCHAR(20), tillNumber VARCHAR(10), 
+            amount DOUBLE, channel VARCHAR(25), RecordType VARCHAR(20), RecordCount INTEGER
             );
 
-        -- One-Minute Interval Summary By Dimensions
-        CREATE OR REPLACE PUMP "Dimension_PUMP_60" AS 
-        INSERT INTO "DESTINATION_SQL_STREAM" (
-            TransactionType, SourceSystem, ServiceName, ProductId, Channel,
-            EventTimestamp, EATTimestamp,
-            EventHour, EventDay, EventMonth, EventYear,
-            WeekInMonth, WeekInYear,
-            DayInWeek, DayInMonth, DayInYear,
-            IsWeekDay, DayName, MonthName,
-            WindowAggregate,
-            WindowSize, ItemCount, Amount
-            )
-        SELECT 
-            transactionType, sourceSystem, serviceName, productId, channel,
-            UNIX_TIMESTAMP(eventTimestamp), EATTimestamp, 
-            EXTRACT(HOUR FROM EATTimestamp), EXTRACT(DAY FROM EATTimestamp), EXTRACT(MONTH FROM EATTimestamp), EXTRACT(YEAR FROM EATTimestamp), 
-            CAST(TIMESTAMP_TO_CHAR('W',EATTimestamp) as INTEGER), CAST(TIMESTAMP_TO_CHAR('w',EATTimestamp) as INTEGER),
-            CAST(TIMESTAMP_TO_CHAR('u',EATTimestamp) as INTEGER), CAST(TIMESTAMP_TO_CHAR('D',EATTimestamp) as INTEGER), CAST(TIMESTAMP_TO_CHAR('d',EATTimestamp) as INTEGER),  
-            CASE 
-                WHEN CAST(TIMESTAMP_TO_CHAR('u',EATTimestamp) as INTEGER) > 5 THEN FALSE
-                ELSE TRUE
-            END, TIMESTAMP_TO_CHAR('EEE',EATTimestamp), TIMESTAMP_TO_CHAR('MMM',EATTimestamp),
-            false,
-            WindowSize, ItemCount, Amount
-        FROM 
-        (
-            SELECT stream
-                saf_datastream."transactionType" as transactionType, saf_datastream."sourceSystem" as sourceSystem, saf_datastream."serviceName" as serviceName, saf_datastream."productId" as productId, saf_datastream."channel" as channel,
-                STEP (saf_datastream.ROWTIME BY INTERVAL '60' SECOND) as eventTimestamp, TO_TIMESTAMP(UNIX_TIMESTAMP(CURRENT_ROW_TIMESTAMP) + 10800000) as EATTimestamp,
-                60 as WindowSize, count(*) as ItemCount, sum(saf_datastream."amount") as Amount
-                FROM "DATA_001" as saf_datastream
-                GROUP BY 
-                saf_datastream."transactionType", saf_datastream."sourceSystem", saf_datastream."serviceName", saf_datastream."productId", saf_datastream."channel",
-                STEP (saf_datastream.ROWTIME BY INTERVAL '60' SECOND)
-        );
+        CREATE OR REPLACE PUMP "TRANSACTION_PUMP" AS INSERT INTO "TRANSACTION_STREAM" 
+            SELECT STREAM
+                s."transactionId", s."requestMsisdn",
+                s."serviceName", s."sourceSystem", s."msisdn", FLOOR(TO_TIMESTAMP(s."transactionTime"+10800000) TO MINUTE), s."responseCode", s."responseStatus",
+                s."transactionType", s."productId", s."sendTo", s."paybill", s."accountNumber", s."tillNumber",
+                s."amount", s."channel", 'Transaction' AS RecordType, COUNT(s."transactionId")
+            FROM "DATA_001" AS s
+            WHERE 
+                s."checkoutRequestID" IS NULL AND 
+                s."merchantRequestID" IS NULL
+            WINDOWED BY STAGGER (
+                        PARTITION BY FLOOR(TO_TIMESTAMP(s."transactionTime"+10800000) TO MINUTE),
+                        s."transactionId", s."requestMsisdn",
+                        s."serviceName", s."sourceSystem", s."msisdn", s."responseCode", s."responseStatus", 
+                        s."transactionType", s."productId", s."sendTo", s."paybill", s."accountNumber", s."tillNumber",
+                        s."amount", s."channel"
+                        RANGE INTERVAL '1' MINUTE);
+        -- callback
+        CREATE OR REPLACE STREAM "CALLBACK_STREAM"(
+            transactionId VARCHAR(20), checkoutRequestID VARCHAR(50), merchantRequestID VARCHAR(50), requestMsisdn INTEGER,
+            serviceName VARCHAR(20), sourceSystem VARCHAR(20), msisdn INTEGER, transactionTime TIMESTAMP, responseCode VARCHAR(20), responseStatus VARCHAR(20),
+            transactionType VARCHAR(20), productId VARCHAR(20), sendTo VARCHAR(20), paybill VARCHAR(10), accountNumber VARCHAR(20), tillNumber VARCHAR(10), 
+            amount DOUBLE, channel VARCHAR(25), RecordType VARCHAR(20), RecordCount INTEGER
+            );
 
-        -- One-Minute Interval Summary
-        CREATE OR REPLACE PUMP "Summary_PUMP_60" AS 
-        INSERT INTO "DESTINATION_SQL_STREAM" (
-            EventTimestamp, EATTimestamp,
-            EventHour, EventDay, EventMonth, EventYear,
-            WeekInMonth, WeekInYear,
-            DayInWeek, DayInMonth, DayInYear,
-            IsWeekDay, DayName, MonthName,
-            WindowAggregate,
-            WindowSize, ItemCount, Amount
-            )
-        SELECT 
-            UNIX_TIMESTAMP(eventTimestamp), EATTimestamp, 
-            EXTRACT(HOUR FROM EATTimestamp), EXTRACT(DAY FROM EATTimestamp), EXTRACT(MONTH FROM EATTimestamp), EXTRACT(YEAR FROM EATTimestamp), 
-            CAST(TIMESTAMP_TO_CHAR('W',EATTimestamp) as INTEGER), CAST(TIMESTAMP_TO_CHAR('w',EATTimestamp) as INTEGER),
-            CAST(TIMESTAMP_TO_CHAR('u',EATTimestamp) as INTEGER), CAST(TIMESTAMP_TO_CHAR('D',EATTimestamp) as INTEGER), CAST(TIMESTAMP_TO_CHAR('d',EATTimestamp) as INTEGER),  
-            CASE 
-                WHEN CAST(TIMESTAMP_TO_CHAR('u',EATTimestamp) as INTEGER) > 5 THEN FALSE
-                ELSE TRUE
-            END, TIMESTAMP_TO_CHAR('EEE',EATTimestamp), TIMESTAMP_TO_CHAR('MMM',EATTimestamp),
-            true,
-            WindowSize, ItemCount, Amount
-        FROM 
-        (
-            SELECT stream
-                STEP (saf_datastream.ROWTIME BY INTERVAL '60' SECOND) as eventTimestamp, TO_TIMESTAMP(UNIX_TIMESTAMP(CURRENT_ROW_TIMESTAMP) + 10800000) as EATTimestamp,
-                60 as WindowSize, count(*) as ItemCount, sum(saf_datastream."amount") as Amount
-                FROM "DATA_001" as saf_datastream
-                GROUP BY 
-                STEP (saf_datastream.ROWTIME BY INTERVAL '60' SECOND)
-        );
+        CREATE OR REPLACE PUMP "CALLBACK_PUMP" AS INSERT INTO "CALLBACK_STREAM"
+        SELECT STREAM
+            s."transactionId", s."checkoutRequestID", s."merchantRequestID", s."requestMsisdn",
+            s."serviceName", s."sourceSystem", s."msisdn", FLOOR(TO_TIMESTAMP(s."transactionTime"+10800000) TO MINUTE), s."responseCode", s."responseStatus",
+            s."transactionType", s."productId", s."sendTo", s."paybill", s."accountNumber", s."tillNumber",
+            s."amount", s."channel", 'Callback' AS RecordType, COUNT(s."transactionId")
+        FROM "DATA_001" AS s
+        WHERE 
+            s."checkoutRequestID" IS NOT NULL AND 
+            s."merchantRequestID" IS NOT NULL
+        WINDOWED BY STAGGER (
+                    PARTITION BY FLOOR(TO_TIMESTAMP(s."transactionTime"+10800000) TO MINUTE),
+                    s."transactionId", s."checkoutRequestID", s."merchantRequestID", s."requestMsisdn",
+                    s."serviceName", s."sourceSystem", s."msisdn", s."responseCode", s."responseStatus", 
+                    s."transactionType", s."productId", s."sendTo", s."paybill", s."accountNumber", s."tillNumber",
+                    s."amount", s."channel"
+                    RANGE INTERVAL '1' MINUTE);
 
-        -- Five-Minute Interval Summary By Dimensions
-        CREATE OR REPLACE PUMP "Dimension_PUMP_300" AS 
-        INSERT INTO "DESTINATION_SQL_STREAM" (
-            TransactionType, SourceSystem, ServiceName, ProductId, Channel,
-            EventTimestamp, EATTimestamp,
-            EventHour, EventDay, EventMonth, EventYear,
-            WeekInMonth, WeekInYear,
-            DayInWeek, DayInMonth, DayInYear,
-            IsWeekDay, DayName, MonthName,
-            WindowAggregate,
-            WindowSize, ItemCount, Amount
-            )
-        SELECT 
-            transactionType, sourceSystem, serviceName, productId, channel,
-            UNIX_TIMESTAMP(eventTimestamp), EATTimestamp, 
-            EXTRACT(HOUR FROM EATTimestamp), EXTRACT(DAY FROM EATTimestamp), EXTRACT(MONTH FROM EATTimestamp), EXTRACT(YEAR FROM EATTimestamp), 
-            CAST(TIMESTAMP_TO_CHAR('W',EATTimestamp) as INTEGER), CAST(TIMESTAMP_TO_CHAR('w',EATTimestamp) as INTEGER),
-            CAST(TIMESTAMP_TO_CHAR('u',EATTimestamp) as INTEGER), CAST(TIMESTAMP_TO_CHAR('D',EATTimestamp) as INTEGER), CAST(TIMESTAMP_TO_CHAR('d',EATTimestamp) as INTEGER),  
-            CASE 
-                WHEN CAST(TIMESTAMP_TO_CHAR('u',EATTimestamp) as INTEGER) > 5 THEN FALSE
-                ELSE TRUE
-            END, TIMESTAMP_TO_CHAR('EEE',EATTimestamp), TIMESTAMP_TO_CHAR('MMM',EATTimestamp),
-            false,
-            WindowSize, ItemCount, Amount
-        FROM 
-        (
-            SELECT stream
-                saf_datastream."transactionType" as transactionType, saf_datastream."sourceSystem" as sourceSystem, saf_datastream."serviceName" as serviceName, saf_datastream."productId" as productId, saf_datastream."channel" as channel,
-                STEP (saf_datastream.ROWTIME BY INTERVAL '5' MINUTE) as eventTimestamp, TO_TIMESTAMP(UNIX_TIMESTAMP(CURRENT_ROW_TIMESTAMP) + 10800000) as EATTimestamp,
-                300 as WindowSize, count(*) as ItemCount, sum(saf_datastream."amount") as Amount
-                FROM "DATA_001" as saf_datastream
-                GROUP BY 
-                saf_datastream."transactionType", saf_datastream."sourceSystem", saf_datastream."serviceName", saf_datastream."productId", saf_datastream."channel",
-                STEP (saf_datastream.ROWTIME BY INTERVAL '5' MINUTE)
-        );
+        -- joined
+        CREATE OR REPLACE STREAM "TXN_WITH_CALLBACK_STREAM"(
+            transactionId VARCHAR(20), checkoutRequestID VARCHAR(50), merchantRequestID VARCHAR(50), requestMsisdn INTEGER,
+            serviceName VARCHAR(20), sourceSystem VARCHAR(20), msisdn INTEGER, transactionTime TIMESTAMP, responseCode VARCHAR(20), responseStatus VARCHAR(20),
+            transactionType VARCHAR(20), productId VARCHAR(20), sendTo VARCHAR(20), paybill VARCHAR(10), accountNumber VARCHAR(20), tillNumber VARCHAR(10), 
+            amount DOUBLE, channel VARCHAR(25), RecordType VARCHAR(20)
+            );
 
-        -- Five-Minute Interval Summary
-        CREATE OR REPLACE PUMP "Summary_PUMP_300" AS 
-        INSERT INTO "DESTINATION_SQL_STREAM" (
-            EventTimestamp, EATTimestamp,
-            EventHour, EventDay, EventMonth, EventYear,
-            WeekInMonth, WeekInYear,
-            DayInWeek, DayInMonth, DayInYear,
-            IsWeekDay, DayName, MonthName,
-            WindowAggregate,
-            WindowSize, ItemCount, Amount
-            )
-        SELECT 
-            UNIX_TIMESTAMP(eventTimestamp), EATTimestamp, 
-            EXTRACT(HOUR FROM EATTimestamp), EXTRACT(DAY FROM EATTimestamp), EXTRACT(MONTH FROM EATTimestamp), EXTRACT(YEAR FROM EATTimestamp), 
-            CAST(TIMESTAMP_TO_CHAR('W',EATTimestamp) as INTEGER), CAST(TIMESTAMP_TO_CHAR('w',EATTimestamp) as INTEGER),
-            CAST(TIMESTAMP_TO_CHAR('u',EATTimestamp) as INTEGER), CAST(TIMESTAMP_TO_CHAR('D',EATTimestamp) as INTEGER), CAST(TIMESTAMP_TO_CHAR('d',EATTimestamp) as INTEGER),  
-            CASE 
-                WHEN CAST(TIMESTAMP_TO_CHAR('u',EATTimestamp) as INTEGER) > 5 THEN FALSE
-                ELSE TRUE
-            END, TIMESTAMP_TO_CHAR('EEE',EATTimestamp), TIMESTAMP_TO_CHAR('MMM',EATTimestamp),
-            true,
-            WindowSize, ItemCount, Amount
-        FROM 
-        (
-            SELECT stream
-                STEP (saf_datastream.ROWTIME BY INTERVAL '5' MINUTE) as eventTimestamp, TO_TIMESTAMP(UNIX_TIMESTAMP(CURRENT_ROW_TIMESTAMP) + 10800000) as EATTimestamp,
-                300 as WindowSize, count(*) as ItemCount, sum(saf_datastream."amount") as Amount
-                FROM "DATA_001" as saf_datastream
-                GROUP BY 
-                STEP (saf_datastream.ROWTIME BY INTERVAL '5' MINUTE)
-        );
+        CREATE OR REPLACE PUMP "TXN_WITH_CALLBACK_PUMP" AS INSERT INTO "TXN_WITH_CALLBACK_STREAM" 
+        SELECT STREAM
+            txn.transactionId, cb.checkoutRequestID, cb.merchantRequestID, txn.requestMsisdn,
+            txn.serviceName, txn.sourceSystem, txn.msisdn, txn.transactionTime, cb.responseCode, cb.responseStatus,
+            txn.transactionType, txn.productId, txn.sendTo, txn.paybill, txn.accountNumber, txn.tillNumber,
+            txn.amount, txn.channel, 'TxnCallback' AS RecordType
+        FROM "TRANSACTION_STREAM" AS txn INNER JOIN "CALLBACK_STREAM" AS cb
+        ON txn.transactionId=cb.transactionId AND txn.transactionTime=cb.transactionTime;
 
       Inputs:
         - NamePrefix: DATA
@@ -309,39 +230,55 @@ Resources:
               - Name: merchantRequestID
                 SqlType: VARCHAR(50)
                 Mapping: $.merchantRequestID
-
-              - Name: requestDetailsMsisdn
-                SqlType: VARCHAR(30)
-                Mapping: $.requestDetails[0].value
-
-              - Name: serviceName
-                SqlType: VARCHAR(30)
-                Mapping: $.serviceName
-              
-              - Name: sourceSystem
-                SqlType: VARCHAR(30)
-                Mapping: $.sourceSystem
-              
-              - Name: msisdn
+              - Name: requestMsisdn
+                SqlType: INTEGER
+                Mapping: $.requestDetails.msisdn
+              - Name: tmstamp
                 SqlType: BIGINT
+                Mapping: $.timestamp
+              - Name: serviceName
+                SqlType: VARCHAR(20)
+                Mapping: $.serviceName
+              - Name: sourceSystem
+                SqlType: VARCHAR(20)
+                Mapping: $.sourceSystem
+              - Name: msisdn
+                SqlType: INTEGER
                 Mapping: $.msisdn
-              
-              - Name: callback
-                SqlType: BOOLEAN
-                Mapping: $.callback
+              - Name: transactionTime
+                SqlType: BIGINT
+                Mapping: $.transactionTime
+              - Name: responseCode
+                SqlType: VARCHAR(20)
+                Mapping: $.responseCode
+              - Name: responseStatus
+                SqlType: VARCHAR(20)
+                Mapping: $.responseStatus
               - Name: transactionType
                 SqlType: VARCHAR(20)
                 Mapping: $.transactionType
               - Name: productId
                 SqlType: VARCHAR(20)
-                Mapping: $.productId
+                Mapping: $.revenue.productId
+              - Name: sendTo
+                SqlType: VARCHAR(20)
+                Mapping: $.revenue.sendTo
+              - Name: paybill
+                SqlType: VARCHAR(10)
+                Mapping: $.revenue.paybill
+              - Name: accountNumber
+                SqlType: VARCHAR(20)
+                Mapping: $.revenue.accountNumber
+              - Name: tillNumber
+                SqlType: VARCHAR(10)
+                Mapping: $.revenue.tillNumber
               - Name: amount
                 SqlType: DOUBLE
-                Mapping: $.amount
+                Mapping: $.revenue.amount
               - Name: channel
                 SqlType: VARCHAR(15)
-                Mapping: $.channel
-              
+                Mapping: $.revenue.channel
+
             RecordFormat:
               RecordFormatType: JSON
               MappingParameters:
@@ -369,7 +306,7 @@ Resources:
         KinesisFirehoseOutput:
           ResourceARN: !GetAtt DeliveryStream.Arn
           RoleARN: !GetAtt KinesisAnalyticsRole.Arn
-        Name: DESTINATION_SQL_STREAM
+        Name: TXN_WITH_CALLBACK_STREAM
 
 Outputs:
   KinesisAppName:

@@ -17,26 +17,35 @@ def process_kpl_record(kpl_record):
         # Concatenate the data from de-aggregated records into a single output payload.
         records = deaggregate_record(raw_kpl_record_data)
         newRecords = []
-        
+
         for i in range(0, len(records)):
+            changed = False
             recordStr = records[i]
             revenue = {}
             requestDetails = {}
-            record = json.loads(recordStr)
-            
-            for item in record["revenue"]:
-                revenue[item["key"]] = item["value"]
-            
-            for item in record['requestDetails']:
-                requestDetails[item['key']] = item['value']
+            try:
+                record = json.loads(recordStr)
+                if 'revenue' in record:
+                    for item in record['revenue']:
+                        revenue[item['key']] = item['value']
+                    del record['revenue']
+                    record['revenue'] = revenue
+                    changed = True
 
-            del record['revenue']
-            del record['requestDetails']
-            record['revenue'] = revenue
-            record['requestDetails'] = requestDetails
-            recordStr = json.dumps(record)
+                if 'requestDetails' in record:
+                    for item in record['requestDetails']:
+                        requestDetails[item['key']] = item['value']
+                    del record['requestDetails']
+                    record['requestDetails'] = requestDetails
+                    changed = True
+
+                if changed:
+                    recordStr = json.dumps(record)
+            except:
+                pass
+
             newRecords.append(recordStr)
-            
+
         output_data = "".join(newRecords)
         return construct_response_record(kpl_record['recordId'], output_data, True)
     except BaseException as e:
