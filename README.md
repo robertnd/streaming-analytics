@@ -15,7 +15,7 @@ NOTE: The de-aggregation operation returns a no-op if records are not aggregated
 A preprocessor is a lambda function that de-aggregates KPL records. There are 2 of them in this repository and can be found at the root of the `ks-preprocessor` directory
 
 1. `standard-preprocessor.py` - This function is provided by AWS and has been copied as-is from here: https://github.com/amazon-archives/serverless-app-examples/tree/master/python/kinesis-analytics-process-kpl-record
-2. `transaction-callback-preprocessor.py` - This is a modification of the standard processor. It flattens Json key-value lists in the Transaction [`schemas/Transaction.json` ] and Callback [] `schemas/Callback.json` ] messages into objects. Kinesis cannot process deeply nested structures. This preparation is important because it surfaces data so that it can be easily correlated and merged
+2. `transaction-callback-preprocessor.py` - This is a modification of the standard processor. It flattens Json key-value lists in the Transaction [`schemas/Transaction.json` ] and Callback [ `schemas/Callback.json` ] messages into objects. Kinesis cannot process deeply nested structures. This preparation is important because it surfaces data so that it can be easily correlated and merged
 
 Dependencies were added manually by navigating into `/<..>/ks-preprocessor` and running this command from inside the directory:
 
