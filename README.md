@@ -27,7 +27,7 @@ pip install -r requirements.txt -t ./
 Create a Zip file:
 
 ```
-zip -r ks-preprocessor.zip .
+zip -r <filename>.zip .
 
 ```
 
