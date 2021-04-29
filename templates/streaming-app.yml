@@ -6,13 +6,13 @@ Parameters:
     Type: String
     Description: Project Name
     MinLength: 4
-    MaxLength: 20
+    MaxLength: 50
 
   ApplicationName:
     Type: String
     Description: Application Name
     MinLength: 4
-    MaxLength: 20
+    MaxLength: 50
 
   DataStreamName:
     Type: String
@@ -20,7 +20,7 @@ Parameters:
     AllowedPattern: "^[0-9a-zA-Z]+([0-9a-zA-Z-]*[0-9a-zA-Z])*$"
     ConstraintDescription: " Required. Must not start or end with a hyphen"
     MinLength: 4
-    MaxLength: 20
+    MaxLength: 50
 
   SourceRecordsAggregation:
     Type: String

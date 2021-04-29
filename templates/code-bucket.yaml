@@ -6,7 +6,7 @@ Parameters:
     Type: String
     Description: Project Name
     MinLength: 4
-    MaxLength: 20
+    MaxLength: 50
 
   BucketName:
     Type: String
