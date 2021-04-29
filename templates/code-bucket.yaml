@@ -1,5 +1,5 @@
 AWSTemplateFormatVersion: "2010-09-09"
-Description: "Code bucket for lambda preprocessor functions and dependencies"
+Description: "This template creates a bucket for a lambda preprocessor archive containing functions and dependencies"
 
 Parameters:
   ProjectName:

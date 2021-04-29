@@ -1,5 +1,5 @@
 AWSTemplateFormatVersion: "2010-09-09"
-Description: "Stack for creating Kinesis Application"
+Description: "This template creates a Kinesis SQL Analytics Application"
 
 Parameters:
   ProjectName:

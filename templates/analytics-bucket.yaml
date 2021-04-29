@@ -1,5 +1,5 @@
 AWSTemplateFormatVersion: "2010-09-09"
-Description: "Analytics bucket"
+Description: "This template creates a bucket for Kinesis Applications processing output"
 
 Parameters:
   ProjectName:

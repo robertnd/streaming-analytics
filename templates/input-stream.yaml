@@ -1,5 +1,5 @@
 AWSTemplateFormatVersion: "2010-09-09"
-Description: "Stack for creating input streams"
+Description: "This template creates a raw input stream"
 
 Parameters:
   ProjectName:

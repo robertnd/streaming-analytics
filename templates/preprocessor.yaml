@@ -1,5 +1,5 @@
 AWSTemplateFormatVersion: "2010-09-09"
-Description: "Input stream lambda preprocessor"
+Description: "This template creates a lambda stream preprocessor for aggregated KPL records. Non-aggregated records aare a no-op and are still successfully processed"
 
 Parameters:
   ProjectName:
